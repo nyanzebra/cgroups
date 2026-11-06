@@ -1,0 +1,12 @@
+[cpu]
+max = { Limited = { quota = 150000, period = 100000 } }
+
+[cpu.weight]
+Weight = 500
+
+[memory]
+max = "512M"
+high = "400M"
+
+[pids]
+max = 100

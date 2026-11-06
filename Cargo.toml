@@ -1,0 +1,15 @@
+[package]
+name = "cgroups"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+
+[dependencies]
+libc = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
