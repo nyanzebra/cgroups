@@ -48,9 +48,9 @@ impl Quantity {
 
         // Find where the numeric part ends
         let numeric_end = s
-            .chars()
-            .position(|c| !c.is_numeric() && c != '-' && c != '+')
-            .unwrap_or(s.len());
+            .char_indices()
+            .find(|&(_, c)| !c.is_ascii_digit() && c != '-' && c != '+')
+            .map_or(s.len(), |(i, _)| i);
 
         if numeric_end == 0 {
             return Err(Error::InvalidQuantity(s.to_string()));

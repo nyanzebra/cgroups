@@ -106,18 +106,7 @@ impl<'de> Deserialize<'de> for CpuRanges {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let mut ranges = Vec::new();
-        for part in s.split(',') {
-            if let Some((start, end)) = part.split_once('-') {
-                let start: u8 = start.parse().map_err(serde::de::Error::custom)?;
-                let end: u8 = end.parse().map_err(serde::de::Error::custom)?;
-                ranges.push(start..(end + 1));
-            } else {
-                let cpu: u8 = part.parse().map_err(serde::de::Error::custom)?;
-                ranges.push(cpu..(cpu + 1));
-            }
-        }
-        Ok(Self(ranges))
+        parse_ranges(&s).map(Self).map_err(serde::de::Error::custom)
     }
 }
 
@@ -145,25 +134,43 @@ impl<'de> Deserialize<'de> for MemRanges {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let mut ranges = Vec::new();
-        for part in s.split(',') {
-            if let Some((start, end)) = part.split_once('-') {
-                let start: u8 = start.parse().map_err(serde::de::Error::custom)?;
-                let end: u8 = end.parse().map_err(serde::de::Error::custom)?;
-                ranges.push(start..(end + 1));
-            } else {
-                let mem: u8 = part.parse().map_err(serde::de::Error::custom)?;
-                ranges.push(mem..(mem + 1));
-            }
-        }
-        Ok(Self(ranges))
+        parse_ranges(&s).map(Self).map_err(serde::de::Error::custom)
     }
+}
+
+/// Parse a cpuset list like "0-3,6,8-10" into half-open ranges.
+fn parse_ranges(s: &str) -> Result<Vec<Range<u8>>, Box<dyn std::error::Error>> {
+    fn exclusive_end(inclusive: u8) -> Result<u8, Box<dyn std::error::Error>> {
+        inclusive
+            .checked_add(1)
+            .ok_or_else(|| format!("id {inclusive} is out of range").into())
+    }
+
+    let mut ranges = Vec::new();
+    for part in s.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let (start, end) = match part.split_once('-') {
+            Some((start, end)) => (start.trim().parse::<u8>()?, end.trim().parse::<u8>()?),
+            None => {
+                let id = part.parse::<u8>()?;
+                (id, id)
+            }
+        };
+        if start > end {
+            return Err(format!("invalid range '{part}'").into());
+        }
+        ranges.push(start..exclusive_end(end)?);
+    }
+    Ok(ranges)
 }
 
 impl CpuRanges {
     /// Create CpuRanges from individual CPU IDs
     pub fn from_cpus(cpus: &[u8]) -> Self {
-        let ranges = cpus.iter().map(|&cpu| cpu..(cpu + 1)).collect();
+        let ranges = cpus.iter().map(|&cpu| cpu..cpu.saturating_add(1)).collect();
         Self(ranges)
     }
 }
@@ -185,29 +192,14 @@ impl FromStr for CpuRanges {
 
     /// Create CpuRanges from a comma-separated string (e.g., "0-3,6,8-10")
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut ranges = Vec::new();
-        for part in s.split(',') {
-            let part = part.trim();
-            if part.is_empty() {
-                continue;
-            }
-            if let Some((start, end)) = part.split_once('-') {
-                let start: u8 = start.parse()?;
-                let end: u8 = end.parse()?;
-                ranges.push(start..(end + 1));
-            } else {
-                let cpu: u8 = part.parse()?;
-                ranges.push(cpu..(cpu + 1));
-            }
-        }
-        Ok(Self(ranges))
+        Ok(Self(parse_ranges(s)?))
     }
 }
 
 impl MemRanges {
     /// Create MemRanges from individual memory node IDs
     pub fn from_nodes(nodes: &[u8]) -> Self {
-        let ranges = nodes.iter().map(|&node| node..(node + 1)).collect();
+        let ranges = nodes.iter().map(|&node| node..node.saturating_add(1)).collect();
         Self(ranges)
     }
 }
@@ -229,22 +221,7 @@ impl FromStr for MemRanges {
 
     /// Create MemRanges from a comma-separated string (e.g., "0-1,3")
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut ranges = Vec::new();
-        for part in s.split(',') {
-            let part = part.trim();
-            if part.is_empty() {
-                continue;
-            }
-            if let Some((start, end)) = part.split_once('-') {
-                let start: u8 = start.parse()?;
-                let end: u8 = end.parse()?;
-                ranges.push(start..(end + 1));
-            } else {
-                let mem: u8 = part.parse()?;
-                ranges.push(mem..(mem + 1));
-            }
-        }
-        Ok(Self(ranges))
+        Ok(Self(parse_ranges(s)?))
     }
 }
 
@@ -300,6 +277,6 @@ mod tests {
     fn test_from_range() {
         let ranges = CpuRanges::from(1..4);
         let serialized = serde_json::to_string(&ranges).unwrap();
-        assert_eq!(serialized, "\"1-4\"");
+        assert_eq!(serialized, "\"1-3\"");
     }
 }

@@ -44,6 +44,8 @@ impl Cgroup<'_> {
             rdma,
         } = config;
 
+        validate_name(name)?;
+
         // Constructed up front, not at the end: if any write below fails and
         // this function returns early via `?`, this local value still goes
         // out of scope and its `Drop` impl cleans up whatever was already
@@ -253,10 +255,12 @@ impl Cgroup<'_> {
         }
 
         // Mark all controllers we configured as enabled in subtree_control
-        create_full_file_path_and_write(
-            PathBuf::from(name).join("cgroup.subtree_control"),
-            subtree_control.join(" "),
-        )?;
+        if !subtree_control.is_empty() {
+            create_full_file_path_and_write(
+                PathBuf::from(name).join("cgroup.subtree_control"),
+                subtree_control.join(" "),
+            )?;
+        }
 
         Ok(cgroup)
     }
@@ -277,6 +281,15 @@ impl Drop for Cgroup<'_> {
             error!("failed to cleanup cgroup for '{}': '{err}'", self.name);
         }
     }
+}
+
+/// Reject names that would escape `CGROUP_BASE` (absolute paths, `..`) or
+/// nest/alias other cgroups.
+fn validate_name(name: &str) -> crate::Result<()> {
+    if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\0']) {
+        return Err(crate::Error::InvalidName(name.to_string()));
+    }
+    Ok(())
 }
 
 fn create_cgroup<P>(pid: pid_t, name: P) -> crate::Result<()>

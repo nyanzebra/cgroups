@@ -11,6 +11,9 @@ pub enum Error {
     #[error("failed to parse quantity: '{0}'")]
     ParseQuantity(#[from] ParseIntError),
 
+    #[error("invalid cgroup name: '{0}'")]
+    InvalidName(String),
+
     #[error("io error: '{0}'")]
     Io(#[from] std::io::Error),
 }
