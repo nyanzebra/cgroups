@@ -199,7 +199,10 @@ impl FromStr for CpuRanges {
 impl MemRanges {
     /// Create MemRanges from individual memory node IDs
     pub fn from_nodes(nodes: &[u8]) -> Self {
-        let ranges = nodes.iter().map(|&node| node..node.saturating_add(1)).collect();
+        let ranges = nodes
+            .iter()
+            .map(|&node| node..node.saturating_add(1))
+            .collect();
         Self(ranges)
     }
 }

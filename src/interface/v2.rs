@@ -57,8 +57,6 @@ impl Cgroup<'_> {
 
         create_dir_all(cgroup.path())?;
 
-        let mut subtree_control = Vec::new();
-
         if let Some(CpuLimits {
             weight,
             max,
@@ -67,8 +65,6 @@ impl Cgroup<'_> {
             uclamp,
         }) = cpu
         {
-            subtree_control.push("+cpu");
-
             if let Some(weight) = weight {
                 match weight {
                     CpuWeight::Weight(w) => {
@@ -135,8 +131,6 @@ impl Cgroup<'_> {
             oom_group,
         }) = memory
         {
-            subtree_control.push("+memory");
-
             if let Some(max) = max {
                 create_full_cgroup_path_and_write(name, "memory.max", max.to_cgroup_value()?)?;
             }
@@ -187,8 +181,6 @@ impl Cgroup<'_> {
         }
 
         if let Some(IoLimits { max, weight }) = io {
-            subtree_control.push("+io");
-
             if let Some(max) = max {
                 for device in &max.devices {
                     create_full_cgroup_path_and_write(name, "io.max", device)?;
@@ -200,12 +192,8 @@ impl Cgroup<'_> {
             }
         }
 
-        if let Some(PidsLimits { max }) = pids {
-            subtree_control.push("+pids");
-
-            if let Some(max) = max {
-                create_full_cgroup_path_and_write(name, "pids.max", max)?;
-            }
+        if let Some(PidsLimits { max: Some(max) }) = pids {
+            create_full_cgroup_path_and_write(name, "pids.max", max)?;
         }
 
         if let Some(CpuSet {
@@ -214,8 +202,6 @@ impl Cgroup<'_> {
             partition,
         }) = cpuset
         {
-            subtree_control.push("+cpuset");
-
             if let Some(Cpus { cpus, exclusive }) = cpus {
                 if let Some(cpus) = cpus {
                     create_full_cgroup_path_and_write(name, "cpuset.cpus", cpus)?;
@@ -236,16 +222,12 @@ impl Cgroup<'_> {
         }
 
         if let Some(rdma) = rdma {
-            subtree_control.push("+rdma");
-
             for (device, limit) in &rdma.limits {
                 create_full_cgroup_path_and_write(name, "rdma.max", format!("{device} {limit}"))?;
             }
         }
 
         if let Some(HugetlbLimits { limits }) = hugetlb {
-            subtree_control.push("+hugetlb");
-
             for HugetlbPageLimit { page_size, max } in limits {
                 if let Some(max) = max {
                     create_full_cgroup_path_and_write(
@@ -255,14 +237,6 @@ impl Cgroup<'_> {
                     )?;
                 }
             }
-        }
-
-        // Mark all controllers we configured as enabled in subtree_control
-        if !subtree_control.is_empty() {
-            create_full_file_path_and_write(
-                PathBuf::from(name).join("cgroup.subtree_control"),
-                subtree_control.join(" "),
-            )?;
         }
 
         Ok(cgroup)

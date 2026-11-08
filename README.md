@@ -30,13 +30,12 @@ cgroup.add(child_pid)?;
   distribution; check with `stat -f -c %T /sys/fs/cgroup`, which should
   print `cgroup2fs`).
 - **The parent cgroup must already have the relevant controllers enabled.**
-  `Cgroup::build` enables controllers (`+cpu`, `+memory`, etc.) in
-  `<name>/cgroup.subtree_control` — but that only turns them on for
-  `<name>`'s *children*. For `<name>`'s own `memory.max`/`cpu.max`/etc. files
-  to exist at all, `/sys/fs/cgroup/ash` (and everything above it, up to the
-  true root) needs those same controllers enabled in *its own*
-  `cgroup.subtree_control` first. This crate doesn't create or bootstrap
-  that base directory — set it up once yourself:
+  `Cgroup::build` does not touch `<name>/cgroup.subtree_control` (a cgroup
+  that delegates controllers to children can't hold processes). For
+  `<name>`'s own `memory.max`/`cpu.max`/etc. files to exist at all,
+  `/sys/fs/cgroup/ash` (and everything above it, up to the true root) needs
+  those controllers enabled in *its own* `cgroup.subtree_control`. This crate
+  doesn't create or bootstrap that base directory — set it up once yourself:
   ```bash
   mkdir -p /sys/fs/cgroup/ash
   echo "+cpu +memory +pids +io +cpuset +hugetlb +rdma" > /sys/fs/cgroup/ash/cgroup.subtree_control
