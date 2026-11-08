@@ -310,7 +310,7 @@ where
     let dir = cgroup_path(name);
 
     match OpenOptions::new().write(true).open(dir.join("cgroup.kill")) {
-        Ok(mut file) => writeln!(file, "1")?,
+        Ok(mut file) => file.write_all(b"1\n")?,
         Err(err) if err.kind() == ErrorKind::NotFound => {}
         Err(err) => return Err(err.into()),
     }
@@ -355,8 +355,11 @@ where
         create_dir_all(parent)?;
     }
 
+    // Control files must get exactly one write() per value; `writeln!` can
+    // split the value and the newline into separate syscalls, which the
+    // kernel may reject. A temp-file unit test can't catch this.
     let mut file = OpenOptions::new().write(true).open(&file_path)?;
-    writeln!(file, "{}", content.as_ref())?;
+    file.write_all(format!("{}\n", content.as_ref()).as_bytes())?;
     Ok(())
 }
 
