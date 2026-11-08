@@ -1,8 +1,9 @@
 use std::{
     borrow::Cow,
     fs::{OpenOptions, create_dir_all, remove_dir},
-    io::Write as _,
+    io::{ErrorKind, Write as _},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use libc::pid_t;
@@ -53,6 +54,8 @@ impl Cgroup<'_> {
         let cgroup = Cgroup {
             name: Cow::Owned(name.to_string()),
         };
+
+        create_dir_all(cgroup.path())?;
 
         let mut subtree_control = Vec::new();
 
@@ -304,9 +307,28 @@ fn cleanup_cgroup<P>(name: P) -> crate::Result<()>
 where
     P: AsRef<Path>,
 {
-    create_full_file_path_and_write(name.as_ref().join("cgroup.kill"), "1")?;
-    remove_dir(cgroup_path(name))?;
-    Ok(())
+    let dir = cgroup_path(name);
+
+    match OpenOptions::new().write(true).open(dir.join("cgroup.kill")) {
+        Ok(mut file) => writeln!(file, "1")?,
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => return Err(err.into()),
+    }
+
+    // cgroup.kill is asynchronous; rmdir fails with EBUSY until the
+    // killed processes have actually exited.
+    let mut attempts = 0;
+    loop {
+        match remove_dir(&dir) {
+            Ok(()) => return Ok(()),
+            Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+            Err(err) if err.raw_os_error() == Some(libc::EBUSY) && attempts < 50 => {
+                attempts += 1;
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
 }
 
 fn create_full_cgroup_path_and_write<P, Q, S>(sub: P, name: Q, content: S) -> crate::Result<()>

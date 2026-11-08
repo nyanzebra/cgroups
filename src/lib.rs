@@ -265,6 +265,15 @@ impl<'de> Deserialize<'de> for CountLimit {
                 Ok(CountLimit::Value(value))
             }
 
+            fn visit_i64<E>(self, value: i64) -> std::result::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                u64::try_from(value)
+                    .map(CountLimit::Value)
+                    .map_err(|_| de::Error::invalid_value(de::Unexpected::Signed(value), &self))
+            }
+
             fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
             where
                 E: de::Error,
@@ -371,6 +380,20 @@ mod tests {
             Quantity::parse("2Gi").unwrap().to_bytes().unwrap(),
             2 * (1i64 << 30)
         );
+    }
+
+    #[test]
+    fn count_limit_toml() {
+        #[derive(Deserialize)]
+        struct T {
+            n: CountLimit,
+        }
+
+        let t: T = toml::from_str("n = 50").unwrap();
+        assert_eq!(t.n, CountLimit::Value(50));
+        let t: T = toml::from_str(r#"n = "max""#).unwrap();
+        assert_eq!(t.n, CountLimit::Max);
+        assert!(toml::from_str::<T>("n = -1").is_err());
     }
 
     #[test]
